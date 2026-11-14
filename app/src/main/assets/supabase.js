@@ -4,7 +4,7 @@ const SUPABASE_PUBLISHABLE_KEY='sb_publishable_tJVks9fur-O2bbVRme9fMA_7pYfHmcV';
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const say=s=>typeof window.toast==='function'?window.toast(s):alert(s);
-let client=null, user=null, listings=[];
+let client=null, user=null, listings=[], adminListings=[], adminFilter='pending';
 function section(){
  const main=$('main');
  if(!main||$('#s-account'))return;
@@ -12,10 +12,54 @@ function section(){
  s.innerHTML='<button class="back" data-go="home">← Главная</button><div class="eyebrow">Облачный аккаунт</div><h1>Аккаунт</h1><p class="sub">Регистрация позволит сохранить профиль и показывать объявления мастеров в общем каталоге.</p><div class="card"><div id="sbState" class="notice">Подключаем защищённое соединение…</div><form id="sbAuthForm"><div class="field"><label>Имя</label><input name="display_name" maxlength="80" placeholder="Как к тебе обращаться"></div><div class="field"><label>Телефон</label><input name="phone" type="tel" placeholder="+7 7XX XXX XX XX"></div><div class="field"><label>Email</label><input name="email" type="email" autocomplete="email" required placeholder="name@example.com"></div><div class="field"><label>Пароль</label><input name="password" type="password" autocomplete="current-password" minlength="6" required placeholder="Минимум 6 символов"></div><div class="actions"><button class="btn" type="submit" id="sbLogin">Войти</button><button class="btn secondary" type="button" id="sbRegister">Создать аккаунт</button></div></form><div id="sbPending" class="notice" style="display:none;margin-top:12px"><strong>Подтвердите электронную почту</strong><p id="sbPendingText" style="margin:8px 0">Мы отправили письмо со ссылкой для подтверждения. Откройте письмо и перейдите по ссылке, затем вернитесь в приложение и войдите.</p><button class="btn secondary small" type="button" id="sbResend">Отправить письмо повторно</button></div><div id="sbSigned" class="hidden"><p class="tiny" id="sbEmail"></p><button class="btn danger small" id="sbLogout">Выйти из аккаунта</button></div></div><p class="tiny">Не используй пароль от Kaspi или других важных сервисов. Если подтверждение email включено в Supabase, после регистрации проверь почту.</p>';
  main.append(s);
  const nav=$('.nav');const b=document.createElement('button');b.dataset.go='account';b.innerHTML='<span class="ico">☁</span>Аккаунт';nav.insertBefore(b,$('#navRole'));
+ const admin=document.createElement('section');admin.className='screen';admin.id='s-cloud-admin';admin.innerHTML='<button class="back" data-go="home">← Главная</button><div class="eyebrow">Управление сервисом</div><h1>Админ-панель</h1><p class="sub">Проверка и публикация объявлений мастеров.</p><div class="statline"><div class="stat"><strong id="admPendingCount">—</strong><span>На проверке</span></div><div class="stat"><strong id="admActiveCount">—</strong><span>Опубликовано</span></div><div class="stat"><strong id="admBlockedCount">—</strong><span>Отклонено</span></div></div><div class="actions" style="margin:12px 0;flex-wrap:wrap"><button class="btn small" data-admin-filter="pending">На проверке</button><button class="btn secondary small" data-admin-filter="active">Опубликовано</button><button class="btn secondary small" data-admin-filter="blocked">Отклонено</button><button class="btn ghost small" id="admRefresh">Обновить</button></div><div id="admNotice" class="notice">Загружаем заявки…</div><div id="admRows" class="list"></div>';
+ main.append(admin);
+ const ab=document.createElement('button');ab.id='sbAdminNav';ab.dataset.go='cloud-admin';ab.innerHTML='<span class="ico">⚙</span>Админ';ab.style.display='none';nav.insertBefore(ab,$('#navRole'));
+ document.head.insertAdjacentHTML('beforeend','<style>#fxAdminButton,#fxAdminNav{display:none!important}</style>');
 }
 function state(msg,ok=false){const el=$('#sbState');if(el){el.textContent=msg;el.className='notice'+(ok?' success':'')}}
+function updateAdminAccess(){
+ const yes=!!user&&user.app_metadata?.role==='admin';
+ const b=$('#sbAdminNav');if(b)b.style.display=yes?'flex':'none';
+ const current=$('#s-cloud-admin');if(!yes&&current?.classList.contains('active')&&window.go)window.go('home');
+}
+function adminNotice(msg,ok=false){const el=$('#admNotice');if(el){el.textContent=msg;el.className='notice'+(ok?' success':'')}}
+function renderAdminRows(){
+ const root=$('#admRows');if(!root)return;
+ const rows=adminListings.filter(x=>x.status===adminFilter);
+ root.innerHTML='';
+ if(!rows.length){root.innerHTML='<div class="empty"><h3>Заявок нет</h3><p>В этой категории пока пусто.</p></div>';return}
+ rows.forEach(m=>{
+  const e=document.createElement('article');e.className='item';
+  const services=Array.isArray(m.services)?m.services.join(', '):'';
+  const brands=Array.isArray(m.car_brands)?m.car_brands.join(', '):'';
+  const date=m.created_at?new Date(m.created_at).toLocaleString('ru-RU'):'';
+  const status=m.status==='pending'?'На проверке':m.status==='active'?'Опубликовано':'Отклонено';
+  e.innerHTML='<div class="item-top"><div class="avatar">🧰</div><div style="flex:1;min-width:0"><h3>'+esc(m.business_name)+'</h3><div class="tiny">Статус: '+status+' · '+esc(date)+'</div><p class="tiny">📍 '+esc(m.city)+' · '+esc(m.address)+'</p><p class="tiny">☎ '+esc(m.phone)+'</p><p style="font-size:13px;line-height:1.5">'+esc(services)+'</p><p class="tiny">Марки: '+esc(brands||'не указаны')+' · График: '+esc(m.working_hours||'не указан')+'</p><p class="tiny">'+esc(m.description||'')+'</p><p class="tiny">ID владельца: '+esc(m.user_id)+'</p><div class="actions" style="margin-top:12px">'+(m.status!=='active'?'<button class="btn small" data-admin-action="active" data-id="'+esc(m.id)+'">Одобрить и опубликовать</button>':'')+(m.status!=='blocked'?'<button class="btn danger small" data-admin-action="blocked" data-id="'+esc(m.id)+'">Отклонить</button>':'')+(m.status!=='pending'?'<button class="btn secondary small" data-admin-action="pending" data-id="'+esc(m.id)+'">Вернуть на проверку</button>':'')+'</div></div></div>';
+  root.append(e);
+ });
+}
+async function loadAdminListings(){
+ if(!user||user.app_metadata?.role!=='admin'){adminNotice('Доступ запрещён. Нужна учётная запись администратора.');updateAdminAccess();return}
+ adminNotice('Загружаем объявления из Supabase…');
+ const {data,error}=await client.from('mechanic_listings').select('id,user_id,business_name,phone,city,address,services,car_brands,working_hours,description,status,created_at').order('created_at',{ascending:false}).limit(200);
+ if(error){adminNotice('Не удалось загрузить заявки: '+error.message);return}
+ adminListings=data||[];
+ $('#admPendingCount').textContent=adminListings.filter(x=>x.status==='pending').length;
+ $('#admActiveCount').textContent=adminListings.filter(x=>x.status==='active').length;
+ $('#admBlockedCount').textContent=adminListings.filter(x=>x.status==='blocked').length;
+ adminNotice('Загружено объявлений: '+adminListings.length,true);renderAdminRows();
+}
+async function setListingStatus(id,status){
+ if(!user||user.app_metadata?.role!=='admin'){say('Недостаточно прав.');return}
+ const {error}=await client.from('mechanic_listings').update({status}).eq('id',id);
+ if(error){adminNotice('Не удалось изменить статус: '+error.message);return}
+ adminNotice(status==='active'?'Объявление опубликовано.':status==='blocked'?'Объявление отклонено.':'Заявка возвращена на проверку.',true);
+ await loadAdminListings();await syncListings();
+}
 function accountView(){
  const form=$('#sbAuthForm'),signed=$('#sbSigned'),pending=$('#sbPending');
+ updateAdminAccess();
  if(user){form.classList.add('hidden');signed.classList.remove('hidden');pending.style.display='none';localStorage.removeItem('apkz_pending_email');$('#sbEmail').textContent='Вошёл: '+user.email;state('Аккаунт подключён. Данные синхронизируются с облаком.',true)}
  else{form.classList.remove('hidden');signed.classList.add('hidden');const email=localStorage.getItem('apkz_pending_email');pending.style.display=email?'block':'none';if(email)$('#sbPendingText').textContent='Письмо для '+email+' отправлено. Подтвердите адрес по ссылке из письма, затем вернитесь сюда и войдите. Это напоминание останется на экране, пока вы не войдёте.';state(email?'Ожидается подтверждение почты.':'Войди или создай аккаунт, чтобы включить облачные функции.')}
 }
@@ -30,7 +74,7 @@ async function auth(){
  client=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false,storage:window.localStorage}});
  window.autoPomoshnikSupabase=client;
  const {data,error}=await client.auth.getSession();if(error)throw error;user=data.session?.user||null;
- client.auth.onAuthStateChange((_event,session)=>{user=session?.user||null;accountView();if(user){saveProfile().catch(e=>state('Ошибка профиля: '+e.message));syncListings()}});
+ client.auth.onAuthStateChange((_event,session)=>{user=session?.user||null;accountView();updateAdminAccess();if(user){saveProfile().catch(e=>state('Ошибка профиля: '+e.message));syncListings()}});
  accountView();if(user){await saveProfile();await syncListings()}
 }
 async function register(){
@@ -101,6 +145,16 @@ async function start(){
  $('#sbRegister').onclick=()=>register().catch(x=>say('Ошибка регистрации: '+x.message));
  $('#sbLogout').onclick=()=>logout().catch(x=>say('Ошибка выхода: '+x.message));
  $('#sbResend').onclick=()=>resendConfirmation().catch(x=>say('Не удалось отправить письмо: '+x.message));
+ $('#admRefresh').onclick=()=>loadAdminListings().catch(x=>adminNotice('Ошибка: '+x.message));
+ document.addEventListener('click',e=>{
+  const filter=e.target.closest('[data-admin-filter]');
+  if(filter){adminFilter=filter.dataset.adminFilter;document.querySelectorAll('[data-admin-filter]').forEach(b=>{b.classList.toggle('secondary',b.dataset.adminFilter!==adminFilter)});renderAdminRows();return}
+  const action=e.target.closest('[data-admin-action]');
+  if(action){const id=action.dataset.id,status=action.dataset.adminAction;action.disabled=true;setListingStatus(id,status).catch(x=>adminNotice('Ошибка: '+x.message));}
+  const go=e.target.closest('[data-go="cloud-admin"]');
+  if(go){e.preventDefault();if(user?.app_metadata?.role!=='admin'){say('Эта панель доступна только администратору.');return}if(window.go)window.go('cloud-admin');loadAdminListings().catch(x=>adminNotice('Ошибка: '+x.message));}
+ });
+
  document.addEventListener('submit',submitListing,true);
  document.addEventListener('click',requestListing,true);
  ['masterSearch','cityFilter','serviceFilter'].forEach(id=>$('#'+id)?.addEventListener('input',renderListings));
