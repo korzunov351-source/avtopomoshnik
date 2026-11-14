@@ -9,15 +9,15 @@ function section(){
  const main=$('main');
  if(!main||$('#s-account'))return;
  const s=document.createElement('section');s.className='screen';s.id='s-account';
- s.innerHTML='<button class="back" data-go="home">← Главная</button><div class="eyebrow">Облачный аккаунт</div><h1>Аккаунт</h1><p class="sub">Регистрация позволит сохранить профиль и показывать объявления мастеров в общем каталоге.</p><div class="card"><div id="sbState" class="notice">Подключаем защищённое соединение…</div><form id="sbAuthForm"><div class="field"><label>Имя</label><input name="display_name" maxlength="80" placeholder="Как к тебе обращаться"></div><div class="field"><label>Телефон</label><input name="phone" type="tel" placeholder="+7 7XX XXX XX XX"></div><div class="field"><label>Email</label><input name="email" type="email" autocomplete="email" required placeholder="name@example.com"></div><div class="field"><label>Пароль</label><input name="password" type="password" autocomplete="current-password" minlength="6" required placeholder="Минимум 6 символов"></div><div class="actions"><button class="btn" type="submit" id="sbLogin">Войти</button><button class="btn secondary" type="button" id="sbRegister">Создать аккаунт</button></div></form><div id="sbSigned" class="hidden"><p class="tiny" id="sbEmail"></p><button class="btn danger small" id="sbLogout">Выйти из аккаунта</button></div></div><p class="tiny">Не используй пароль от Kaspi или других важных сервисов. Если подтверждение email включено в Supabase, после регистрации проверь почту.</p>';
+ s.innerHTML='<button class="back" data-go="home">← Главная</button><div class="eyebrow">Облачный аккаунт</div><h1>Аккаунт</h1><p class="sub">Регистрация позволит сохранить профиль и показывать объявления мастеров в общем каталоге.</p><div class="card"><div id="sbState" class="notice">Подключаем защищённое соединение…</div><form id="sbAuthForm"><div class="field"><label>Имя</label><input name="display_name" maxlength="80" placeholder="Как к тебе обращаться"></div><div class="field"><label>Телефон</label><input name="phone" type="tel" placeholder="+7 7XX XXX XX XX"></div><div class="field"><label>Email</label><input name="email" type="email" autocomplete="email" required placeholder="name@example.com"></div><div class="field"><label>Пароль</label><input name="password" type="password" autocomplete="current-password" minlength="6" required placeholder="Минимум 6 символов"></div><div class="actions"><button class="btn" type="submit" id="sbLogin">Войти</button><button class="btn secondary" type="button" id="sbRegister">Создать аккаунт</button></div></form><div id="sbPending" class="notice" style="display:none;margin-top:12px"><strong>Подтвердите электронную почту</strong><p id="sbPendingText" style="margin:8px 0">Мы отправили письмо со ссылкой для подтверждения. Откройте письмо и перейдите по ссылке, затем вернитесь в приложение и войдите.</p><button class="btn secondary small" type="button" id="sbResend">Отправить письмо повторно</button></div><div id="sbSigned" class="hidden"><p class="tiny" id="sbEmail"></p><button class="btn danger small" id="sbLogout">Выйти из аккаунта</button></div></div><p class="tiny">Не используй пароль от Kaspi или других важных сервисов. Если подтверждение email включено в Supabase, после регистрации проверь почту.</p>';
  main.append(s);
  const nav=$('.nav');const b=document.createElement('button');b.dataset.go='account';b.innerHTML='<span class="ico">☁</span>Аккаунт';nav.insertBefore(b,$('#navRole'));
 }
 function state(msg,ok=false){const el=$('#sbState');if(el){el.textContent=msg;el.className='notice'+(ok?' success':'')}}
 function accountView(){
- const form=$('#sbAuthForm'),signed=$('#sbSigned');
- if(user){form.classList.add('hidden');signed.classList.remove('hidden');$('#sbEmail').textContent='Вошёл: '+user.email;state('Аккаунт подключён. Данные синхронизируются с облаком.',true)}
- else{form.classList.remove('hidden');signed.classList.add('hidden');state('Войди или создай аккаунт, чтобы включить облачные функции.')}
+ const form=$('#sbAuthForm'),signed=$('#sbSigned'),pending=$('#sbPending');
+ if(user){form.classList.add('hidden');signed.classList.remove('hidden');pending.style.display='none';localStorage.removeItem('apkz_pending_email');$('#sbEmail').textContent='Вошёл: '+user.email;state('Аккаунт подключён. Данные синхронизируются с облаком.',true)}
+ else{form.classList.remove('hidden');signed.classList.add('hidden');const email=localStorage.getItem('apkz_pending_email');pending.style.display=email?'block':'none';if(email)$('#sbPendingText').textContent='Письмо для '+email+' отправлено. Подтвердите адрес по ссылке из письма, затем вернитесь сюда и войдите. Это напоминание останется на экране, пока вы не войдёте.';state(email?'Ожидается подтверждение почты.':'Войди или создай аккаунт, чтобы включить облачные функции.')}
 }
 async function saveProfile(){
  if(!user)return;
@@ -38,7 +38,14 @@ async function register(){
  const {data,error}=await client.auth.signUp({email:d.email,password:d.password,options:{data:{display_name:d.display_name||'',phone:d.phone||''}}});
  if(error)throw error;
  if(data.session){user=data.user;await saveProfile();accountView();say('Аккаунт создан. Ты вошёл.')}
- else say('Аккаунт создан. Проверь почту и подтверди email, затем войди.');
+ else{localStorage.setItem('apkz_pending_email',d.email);accountView();say('Аккаунт создан. Подтверди email по письму. Напоминание останется на экране.');}
+}
+async function resendConfirmation(){
+ const email=localStorage.getItem('apkz_pending_email')||$('#sbAuthForm').elements.email.value.trim();
+ if(!email){say('Сначала введи email.');return}
+ const {error}=await client.auth.resend({type:'signup',email});
+ if(error)throw error;
+ say('Письмо отправлено повторно. Проверь входящие и папку «Спам».');
 }
 async function login(){
  const d=Object.fromEntries(new FormData($('#sbAuthForm')));
@@ -93,6 +100,7 @@ async function start(){
  $('#sbAuthForm').addEventListener('submit',e=>{e.preventDefault();login().catch(x=>say('Ошибка входа: '+x.message))});
  $('#sbRegister').onclick=()=>register().catch(x=>say('Ошибка регистрации: '+x.message));
  $('#sbLogout').onclick=()=>logout().catch(x=>say('Ошибка выхода: '+x.message));
+ $('#sbResend').onclick=()=>resendConfirmation().catch(x=>say('Не удалось отправить письмо: '+x.message));
  document.addEventListener('submit',submitListing,true);
  document.addEventListener('click',requestListing,true);
  ['masterSearch','cityFilter','serviceFilter'].forEach(id=>$('#'+id)?.addEventListener('input',renderListings));
