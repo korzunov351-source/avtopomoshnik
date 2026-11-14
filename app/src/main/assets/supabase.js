@@ -73,6 +73,7 @@ async function auth(){
  if(!window.supabase?.createClient){state('Не удалось загрузить библиотеку Supabase. Проверь интернет-соединение и перезапусти приложение.');return}
  client=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false,storage:window.localStorage}});
  window.autoPomoshnikSupabase=client;
+ startListingLiveUpdates();
  const {data,error}=await client.auth.getSession();if(error)throw error;user=data.session?.user||null;
  client.auth.onAuthStateChange((_event,session)=>{user=session?.user||null;accountView();updateAdminAccess();if(user){saveProfile().catch(e=>state('Ошибка профиля: '+e.message));syncListings()}});
  accountView();if(user){await saveProfile();await syncListings()}
@@ -103,7 +104,24 @@ function listingCard(m){
  e.innerHTML='<div class="item-top"><div class="avatar">🧰</div><div style="flex:1;min-width:0"><h3>'+esc(m.business_name)+'</h3><div class="tiny">📍 '+esc(m.city)+' · '+esc(m.working_hours||'График не указан')+'</div><p style="font-size:13px;line-height:1.5;margin:9px 0">'+esc(services)+'</p><div class="chips">'+(Array.isArray(m.car_brands)?m.car_brands:[]).map(x=>'<span class="chip">'+esc(x)+'</span>').join('')+'</div><div class="tiny">'+esc(m.address)+'</div><div class="actions" style="margin-top:12px"><a class="btn small" href="tel:'+esc(m.phone)+'">☎ Позвонить</a><a class="btn secondary small" href="https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent((m.address||'')+' '+(m.city||''))+'">⌖ Маршрут</a></div></div></div>';
  return e;
 }
-window.refreshCloudListings=()=>syncListings();
+window.refreshCloudListings=async()=>{await syncListings();};
+let listingPollStarted=false,listingRealtimeChannel=null;
+function startListingLiveUpdates(){
+ if(listingPollStarted||!client)return;listingPollStarted=true;
+ // Polling is the reliable fallback even when Supabase Realtime is not enabled for this table.
+ setInterval(()=>{if(user&&document.visibilityState==='visible'&&document.getElementById('s-masters')?.classList.contains('active'))syncListings()},20000);
+ document.addEventListener('visibilitychange',()=>{if(user&&document.visibilityState==='visible'&&document.getElementById('s-masters')?.classList.contains('active'))syncListings()});
+ try{
+  listingRealtimeChannel=client.channel('public-master-listings-live')
+   .on('postgres_changes',{event:'*',schema:'public',table:'mechanic_listings'},payload=>{
+    if(payload.eventType==='DELETE'){listings=listings.filter(x=>x.id!==payload.old.id)}
+    else if(payload.new?.status==='active'){syncListings()}
+    else if(payload.new?.id){listings=listings.filter(x=>x.id!==payload.new.id)}
+    renderListings();
+   }).subscribe();
+ }catch(e){console.warn('Realtime unavailable; polling remains active',e)}
+}
+
 async function syncListings(){
  if(!client)return;
  const {data,error}=await client.from('mechanic_listings').select('id,business_name,phone,city,address,services,car_brands,working_hours,description').eq('status','active').order('created_at',{ascending:false}).limit(100);
