@@ -45,4 +45,4 @@ $('#deleteProfile').onclick=()=>{if(confirm('Удалить профиль ма�
 $('#diagSearch').addEventListener('input',e=>{renderD(e.target.value);$('#diagDetail').innerHTML=''});
 document.addEventListener('click',e=>{let rb=e.target.closest('[data-role]');if(rb){e.preventDefault();setRole(rb.dataset.role);return}let d=e.target.closest('[data-d]');if(d){go('diagnose');$('#diagSearch').value='';renderD();showD(d.dataset.d);return}let g=e.target.closest('[data-go]');if(g){e.preventDefault();go(g.dataset.go)}});
 $('#roleSwitch').onclick=()=>go('role');$('#navRole').onclick=()=>go('role');applyRole();renderD();renderM();renderMasters();if(!role)go('role');else go('home');if('serviceWorker'in navigator&&location.protocol.startsWith('http'))addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
-</script></body></html>
+</script><script src="features.js"></script></body></html>
