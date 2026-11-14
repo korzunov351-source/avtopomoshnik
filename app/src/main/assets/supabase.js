@@ -71,7 +71,7 @@ async function submitListing(e){
  if(!user){say('Сначала войди или создай аккаунт в разделе «Аккаунт».');if(window.go)window.go('account');return}
  const f=e.target,d=Object.fromEntries(new FormData(f));
  if(!f.elements.agree.checked){say('Подтверди согласие на публикацию контактов.');return}
- const row={user_id:user.id,business_name:d.name.trim(),phone:d.phone.trim(),city:d.city.trim(),address:d.address.trim(),services:d.services.split(',').map(x=>x.trim()).filter(Boolean),car_brands:(d.brands||'').split(',').map(x=>x.trim()).filter(Boolean),working_hours:d.hours||'',description:d.about||'',status:'pending',is_featured:false};
+ localStorage.setItem('apkz_profile',JSON.stringify({...d,agree:true,status:'На модерации',requestNote:'Заявка отправлена в облако и ожидает модерации.'}));\n const row={user_id:user.id,business_name:d.name.trim(),phone:d.phone.trim(),city:d.city.trim(),address:d.address.trim(),services:d.services.split(',').map(x=>x.trim()).filter(Boolean),car_brands:(d.brands||'').split(',').map(x=>x.trim()).filter(Boolean),working_hours:d.hours||'',description:d.about||'',status:'pending',is_featured:false};
  const {error}=await client.from('mechanic_listings').upsert(row,{onConflict:'user_id'});
  if(error){say('Не удалось отправить объявление: '+error.message);return}
  say('Заявка отправлена в облако и ожидает модерации.');
