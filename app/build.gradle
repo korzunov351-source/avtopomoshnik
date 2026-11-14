@@ -2,18 +2,6 @@ plugins {
     id 'com.android.application'
 }
 
-def stableKeystoreBase64 = System.getenv("ANDROID_KEYSTORE_BASE64")
-def stableKeystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
-def stableKeystoreFile = rootProject.file("release-keystore.jks")
-def stableSigningEnabled = stableKeystoreBase64 != null &&
-        !stableKeystoreBase64.isBlank() &&
-        stableKeystorePassword != null &&
-        !stableKeystorePassword.isBlank()
-
-if (stableSigningEnabled) {
-    stableKeystoreFile.bytes = Base64.decoder.decode(stableKeystoreBase64)
-}
-
 android {
     namespace 'kz.autopomoshnik.app'
     compileSdk 35
@@ -24,24 +12,5 @@ android {
         targetSdk 35
         versionCode 3
         versionName '1.0.2'
-    }
-
-    signingConfigs {
-        if (stableSigningEnabled) {
-            stable {
-                storeFile stableKeystoreFile
-                storePassword stableKeystorePassword
-                keyAlias 'autopomoshnik'
-                keyPassword stableKeystorePassword
-            }
-        }
-    }
-
-    buildTypes {
-        debug {
-            if (stableSigningEnabled) {
-                signingConfig signingConfigs.stable
-            }
-        }
     }
 }
