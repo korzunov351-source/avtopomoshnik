@@ -24,6 +24,9 @@ public class MainActivity extends Activity {
         window.setNavigationBarColor(android.graphics.Color.rgb(16, 24, 32));
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         webView = new WebView(this);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            webView.setImportantForAutofill(android.view.View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
+        }
         webView.setBackgroundColor(android.graphics.Color.rgb(16, 24, 32));
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
